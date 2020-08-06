@@ -1,0 +1,161 @@
+## [Install Docker Engine](https://docs.docker.com/engine/install/ubuntu/#installation-methods)
+
+## [Install Docker Compose](https://docs.docker.com/compose/install/)
+
+You need to ensure that this directories exists by creating them:
+
+```bash
+mkdir ~/jenkins
+mkdir ~/certs
+mkdir ~/nginx/conf.d
+```
+
+Inside your nginx/conf.d/ directory create the jenkins.conf file:
+
+```yaml
+ubuntu@IT-Jenkins:~/nginx/conf.d$ touch jenkins.conf
+```
+
+Copy this code to the jenkins.conf file:
+
+```yaml
+server {
+    listen 80;
+    server_name <server.domain.com>;
+
+    location / {
+
+        proxy_pass http://jenkins:8080;
+    }
+}
+```
+
+Create Working Directory
+
+```bash
+ubuntu@IT-Jenkins:~$ mkdir jenkins-env
+```
+
+Inside your working directory create the docker-compose.yml file:
+
+```bash
+ubuntu@IT-Jenkins:~/jenkins-env$ touch docker-compose.yml
+```
+
+Copy this code to the docker-compose.yml:
+
+```yaml
+version: '3.3'
+services:
+  jenkins:
+    image: "jenkins/jenkins:lts"
+    user: root
+    expose:
+      - 8080
+    ports:
+      - 50000:50000
+    container_name: it-jenkins
+    volumes:
+      - ~/jenkins:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /usr/local/bin/docker:/usr/local/bin/docker
+    networks:
+      - jenkins_nw
+    restart: unless-stopped
+  nginx:
+    image: "nginx:latest"
+    links:
+      - "jenkins"
+      - "jenkins:jenkinssvc"
+    ports:
+      - "80:80"
+      - "443:443"
+    container_name: it-nginx
+    volumes:
+      - ~/certs:/etc/ssl
+      - ~/nginx/conf.d:/etc/nginx/conf.d
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+    networks:
+      - jenkins_nw
+    depends_on:
+      - jenkins
+    restart: unless-stopped
+
+networks:
+  jenkins_nw:
+    driver: bridge
+```
+
+Bring the Environment up by executing the following command on a terminal:
+
+```bash
+ubuntu@IT-Jenkins:~/jenkins-env$ docker-compose up -d
+Creating network "jenkins-env_jenkins_nw" with driver "bridge"
+Creating it-jenkins ... done
+Creating it-nginx   ... done
+```
+
+# Open and **Unlock Jenkins**
+
+Open your browser and type your server IP or DNS. (For example http://it-jenkins.argus-sec.com)
+
+To ensure Jenkins is securely set up by the administrator, a password has been written to the log and this file on the server: `/var/jenkins_home/secrets/initialAdminPassword`
+
+To retrieve the admin password , Log in to the Jenkins container:
+
+```bash
+ubuntu@IT-Jenkins:~/jenkins-env$ docker exec -it it-jenkins /bin/bash
+```
+
+In the Jenkins container open the file initialAdminPassword:
+
+```bash
+cat /var/jenkins_home/secrets/initialAdminPassword
+```
+
+## Configure your Jenkins to use SSL Certificate
+
+1. Using your certificates:
+
+    Copy your certificates (cert.key, cert.pem) to your ~/certs folder.
+
+2. Change your nginx config file
+
+    Go to your ~/nginx/conf.d folder and change the  jenkins.conf to support ssl.
+
+    ```bash
+    server {
+        listen 443 ssl;
+        server_name it-jenkins.argus-sec.com;
+
+        ssl_certificate /etc/ssl/jenkins.crt;
+        ssl_certificate_key /etc/ssl/jenkins.key;
+
+        ssl_session_cache  builtin:1000  shared:SSL:10m;
+        ssl_protocols  TLSv1 TLSv1.1 TLSv1.2;
+        ssl_ciphers HIGH:!aNULL:!eNULL:!EXPORT:!CAMELLIA:!DES:!MD5:!PSK:!RC4;
+        ssl_prefer_server_ciphers on;
+        location / {
+
+            proxy_pass http://jenkins:8080;
+        }
+    }
+    ```
+
+3. Make sure the syntax is OK.
+
+    ```bash
+    ubuntu@IT-Jenkins:~/nginx/conf.d$ docker exec it-nginx nginx -t
+    nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+    nginx: configuration file /etc/nginx/nginx.conf test is successful
+    ```
+
+4. Restart Nginx server
+
+    ```bash
+    ubuntu@IT-Jenkins:~/nginx/conf.d$ docker exec it-nginx nginx -s reload
+    ```
+
+5. Login to your server
+
+    ![https://s3-us-west-2.amazonaws.com/secure.notion-static.com/ed305362-854d-4160-809b-90ac37a48812/Untitled.png](https://s3-us-west-2.amazonaws.com/secure.notion-static.com/ed305362-854d-4160-809b-90ac37a48812/Untitled.png)
