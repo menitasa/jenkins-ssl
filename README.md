@@ -1,2 +1,2 @@
 # jenkins-ssl
-Install Jenkins with Nginx on Docker
+Install Jenkins with Nginx Reverse Proxy using Docker compose 
